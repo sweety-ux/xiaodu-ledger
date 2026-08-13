@@ -94,6 +94,35 @@ body {
 .icon-btn:hover { background: #e6e9ee; }
 
 /* ---------- 记账页 ---------- */
+.type-toggle {
+  display: flex;
+  background: #f1f3f5;
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 14px;
+}
+.type-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 10px;
+  border-radius: 9px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-family: inherit;
+}
+.type-btn.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12);
+}
+
+/* 金额颜色：支出红 / 收入绿 */
+.red { color: var(--red) !important; }
+.green { color: #0ca30c !important; }
+
 .amount-row {
   display: flex;
   align-items: center;
@@ -193,6 +222,20 @@ body {
   box-shadow: var(--shadow);
   margin-bottom: 8px;
 }
+.item-amount.inc { color: #0ca30c; }
+.type-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+.type-badge.exp { background: #fdecec; color: var(--red); }
+.type-badge.inc { background: #e8f7ee; color: #0ca30c; }
+.day-sums { display: flex; gap: 10px; }
+.day-sums b { font-weight: 600; }
+.day-sums .exp { color: var(--red); }
+.day-sums .inc { color: #0ca30c; }
 .item-icon {
   width: 40px; height: 40px;
   flex-shrink: 0;
@@ -235,6 +278,31 @@ body {
 
 .chart { width: 100%; height: 280px; }
 #barChart { height: 240px; }
+
+.chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.chart-head h3 { margin-bottom: 0; }
+.seg { display: flex; background: #f1f3f5; border-radius: 8px; padding: 2px; }
+.seg-btn {
+  border: none;
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-family: inherit;
+}
+.seg-btn.active {
+  background: #fff;
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1);
+}
 
 /* 简易图（离线模式） */
 .fb-row {

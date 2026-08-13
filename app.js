@@ -77,7 +77,13 @@ let records = [];
 function loadRecords() {
   try { records = JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
   catch (e) { records = []; }
+  normalizeTypes(records);
   return records;
+}
+
+// 旧数据没有 type 字段，统一视为支出
+function normalizeTypes(arr) {
+  arr.forEach((r) => { if (r && !r.type) r.type = 'expense'; });
 }
 
 function saveRecords() { localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); }
@@ -115,25 +121,56 @@ function sortByDateDesc(arr) {
 let viewMonth = currentMonthStr();   // 账单页当前月份
 let statMonth = currentMonthStr();   // 统计页当前月份
 let editingId = null;                // 正在修改的记录 id
+let entryType = 'expense';           // 记账页当前类型：支出/收入
+let statPieType = 'expense';         // 统计页饼图当前类型：支出/收入
 let selectedCat1 = CATEGORIES[0].name;
 let selectedCat2 = CATEGORIES[0].subs[0];
+
+// 当前类型对应的分类表 / 颜色表 / 图标
+function getEntryCats() { return entryType === 'income' ? INCOME_CATEGORIES : CATEGORIES; }
+function getStatCats() { return statPieType === 'income' ? INCOME_CATEGORIES : CATEGORIES; }
+function catIconOf(type, cat1) {
+  const list = type === 'income' ? INCOME_CATEGORIES : CATEGORIES;
+  const c = list.find((x) => x.name === cat1);
+  return c ? c.icon : '📦';
+}
+function colorOf(type, cat1) {
+  const map = type === 'income' ? INCOME_COLORS : CATEGORY_COLORS;
+  return map[cat1] || '#898781';
+}
 
 /* ================= 记账页 ================= */
 
 function renderCat1() {
-  $('cat1Wrap').innerHTML = CATEGORIES.map((c) =>
+  $('cat1Wrap').innerHTML = getEntryCats().map((c) =>
     '<button class="chip ' + (c.name === selectedCat1 ? 'active' : '') + '" data-cat="' + esc(c.name) + '">' +
     c.icon + ' ' + esc(c.name) + '</button>'
   ).join('');
 }
 
 function renderCat2() {
-  const cat = CATEGORIES.find((c) => c.name === selectedCat1);
+  const cat = getEntryCats().find((c) => c.name === selectedCat1);
   const subs = cat ? cat.subs : [];
   $('cat2Wrap').innerHTML = subs.map((s) =>
     '<button class="chip sub ' + (s === selectedCat2 ? 'active' : '') + '" data-sub="' + esc(s) + '">' +
     esc(s) + '</button>'
   ).join('');
+}
+
+function renderTypeToggle() {
+  $('btnTypeExpense').classList.toggle('active', entryType === 'expense');
+  $('btnTypeIncome').classList.toggle('active', entryType === 'income');
+}
+
+// 切换记账类型：同时把选中的分类切到对应体系的第一个
+function setEntryType(t) {
+  entryType = t;
+  const list = getEntryCats();
+  selectedCat1 = list[0].name;
+  selectedCat2 = list[0].subs[0];
+  renderTypeToggle();
+  renderCat1();
+  renderCat2();
 }
 
 function resetForm() {
@@ -143,8 +180,10 @@ function resetForm() {
   $('inputDate').value = todayStr();
   $('editingBar').classList.add('hidden');
   $('btnSave').textContent = '保存记录';
-  selectedCat1 = CATEGORIES[0].name;
-  selectedCat2 = CATEGORIES[0].subs[0];
+  renderTypeToggle();
+  const list = getEntryCats();
+  selectedCat1 = list[0].name;
+  selectedCat2 = list[0].subs[0];
   renderCat1();
   renderCat2();
 }
@@ -152,11 +191,13 @@ function resetForm() {
 // 点击账单里的「编辑」→ 预填表单
 function startEdit(r) {
   editingId = r.id;
+  entryType = r.type === 'income' ? 'income' : 'expense';
   $('inputAmount').value = String(parseFloat(r.amount));
   $('inputDate').value = r.date;
   $('inputNote').value = r.note || '';
   selectedCat1 = r.cat1;
   selectedCat2 = r.cat2;
+  renderTypeToggle();
   renderCat1();
   renderCat2();
   $('editingLabel').textContent = r.cat1 + '·' + r.cat2 + '　' + fmtDateCN(r.date);
@@ -174,6 +215,7 @@ function saveRecord() {
 
   const rec = {
     id: editingId || uid(),
+    type: entryType,
     amount: Math.round(amt * 100) / 100,
     date: date,
     cat1: selectedCat1,
@@ -207,10 +249,18 @@ function emptyHTML(title, sub) {
 
 function renderBill() {
   const ms = monthRecords(viewMonth);
+  const exps = ms.filter((r) => r.type !== 'income');
+  const incs = ms.filter((r) => r.type === 'income');
+  const expTotal = sum(exps.map((r) => r.amount));
+  const incTotal = sum(incs.map((r) => r.amount));
+  const balance = incTotal - expTotal;
+
   $('billMonthLabel').textContent = fmtMonthCN(viewMonth);
   $('billToday').classList.toggle('hidden', viewMonth === currentMonthStr());
-  $('billTotal').textContent = fmtMoney(sum(ms.map((r) => r.amount)));
-  $('billCount').textContent = ms.length + ' 笔';
+  $('billExpense').textContent = fmtMoney(expTotal);
+  $('billIncome').textContent = fmtMoney(incTotal);
+  $('billBalance').textContent = fmtMoney(balance);
+  $('billBalance').className = 'sum-amount ' + (balance >= 0 ? 'green' : 'red');
 
   const listEl = $('billList');
   if (!ms.length) {
@@ -225,18 +275,24 @@ function renderBill() {
   let html = '';
   Object.keys(groups).sort((a, b) => b.localeCompare(a)).forEach((date) => {
     const items = groups[date];
+    const dExp = sum(items.filter((i) => i.type !== 'income').map((i) => i.amount));
+    const dInc = sum(items.filter((i) => i.type === 'income').map((i) => i.amount));
+    let daySums = '';
+    if (dExp > 0) daySums += '<b class="exp">支出 ' + fmtMoney(dExp) + '</b>';
+    if (dInc > 0) daySums += '<b class="inc">收入 ' + fmtMoney(dInc) + '</b>';
     html += '<div class="day-group">' +
       '<div class="day-head"><span>' + fmtDateCN(date) + ' ' + weekDayCN(date) + '</span>' +
-      '<span class="day-sum">' + fmtMoney(sum(items.map((i) => i.amount))) + '</span></div>';
+      '<span class="day-sums">' + (daySums || '<b>' + fmtMoney(0) + '</b>') + '</span></div>';
     items.forEach((r) => {
-      const cat = CATEGORIES.find((c) => c.name === r.cat1);
+      const isInc = r.type === 'income';
       html += '<div class="bill-item">' +
-        '<span class="item-icon">' + (cat ? cat.icon : '📦') + '</span>' +
+        '<span class="item-icon">' + catIconOf(r.type, r.cat1) + '</span>' +
         '<div class="item-main">' +
-        '<div class="item-title">' + esc(r.cat1) + '·' + esc(r.cat2) + '</div>' +
+        '<div class="item-title">' + esc(r.cat1) + '·' + esc(r.cat2) +
+        '<span class="type-badge ' + (isInc ? 'inc' : 'exp') + '">' + (isInc ? '收入' : '支出') + '</span></div>' +
         '<div class="item-note">' + (r.note ? esc(r.note) : '') + '</div>' +
         '</div>' +
-        '<span class="item-amount">-' + fmtMoney(r.amount) + '</span>' +
+        '<span class="item-amount ' + (isInc ? 'inc' : '') + '">' + (isInc ? '+' : '-') + fmtMoney(r.amount) + '</span>' +
         '<div class="item-actions">' +
         '<button class="act-btn edit" data-id="' + r.id + '">编辑</button>' +
         '<button class="act-btn del" data-id="' + r.id + '">删除</button>' +
@@ -268,31 +324,46 @@ function daysElapsed(m) {
 
 function renderStats() {
   const ms = monthRecords(statMonth);
-  const total = sum(ms.map((r) => r.amount));
+  const exps = ms.filter((r) => r.type !== 'income');
+  const incs = ms.filter((r) => r.type === 'income');
+  const expTotal = sum(exps.map((r) => r.amount));
+  const incTotal = sum(incs.map((r) => r.amount));
+  const balance = incTotal - expTotal;
+
   $('statMonthLabel').textContent = fmtMonthCN(statMonth);
   $('statToday').classList.toggle('hidden', statMonth === currentMonthStr());
-  $('statTotal').textContent = fmtMoney(total);
-  $('statCount').textContent = ms.length;
-  $('statDaily').textContent = fmtMoney(ms.length ? total / daysElapsed(statMonth) : 0);
+  $('statIncome').textContent = fmtMoney(incTotal);
+  $('statExpense').textContent = fmtMoney(expTotal);
+  $('statBalance').textContent = fmtMoney(balance);
+  $('statBalance').className = balance >= 0 ? 'green' : 'red';
 
-  renderPie(ms, total);
+  renderPieSeg();
+  renderPie(ms);
   renderBar(ms);
-  renderDetail(ms, total);
+  renderDetail(ms);
 }
 
-// 分类占比饼图（按一级大类）
-function renderPie(ms, total) {
+// 饼图切换按钮状态
+function renderPieSeg() {
+  $('btnPieExpense').classList.toggle('active', statPieType === 'expense');
+  $('btnPieIncome').classList.toggle('active', statPieType === 'income');
+}
+
+// 分类占比饼图（按一级大类，可切换支出/收入）
+function renderPie(ms) {
   const el = $('pieChart');
+  const list = ms.filter((r) => (statPieType === 'income' ? r.type === 'income' : r.type !== 'income'));
   const map = {};
-  ms.forEach((r) => { map[r.cat1] = (map[r.cat1] || 0) + r.amount; });
+  list.forEach((r) => { map[r.cat1] = (map[r.cat1] || 0) + r.amount; });
   const items = Object.entries(map).sort((a, b) => b[1] - a[1]);
+  const total = sum(list.map((r) => r.amount));
 
   if (window.chartsEnabled) {
     const inst = echarts.getInstanceByDom(el);
     if (inst) inst.dispose();
     const chart = echarts.init(el);
     chart.setOption({
-      color: items.map((i) => CATEGORY_COLORS[i[0]] || '#898781'),
+      color: items.map((i) => colorOf(statPieType, i[0])),
       tooltip: {
         trigger: 'item',
         formatter: (p) => p.name + '<br/>' + fmtMoney(p.value) + '（' + p.percent + '%）'
@@ -316,23 +387,29 @@ function renderPie(ms, total) {
     // 离线简易版：色块 + 名称 + 占比条
     el.innerHTML = items.map((kv) => {
       const pct = total ? (kv[1] / total * 100).toFixed(1) : '0';
+      const col = colorOf(statPieType, kv[0]);
       return '<div class="fb-row">' +
-        '<span class="fb-dot" style="background:' + (CATEGORY_COLORS[kv[0]] || '#898781') + '"></span>' +
+        '<span class="fb-dot" style="background:' + col + '"></span>' +
         '<span class="fb-name">' + esc(kv[0]) + '</span>' +
-        '<div class="fb-bar"><div class="fb-bar-in" style="width:' + pct + '%;background:' + (CATEGORY_COLORS[kv[0]] || '#898781') + '"></div></div>' +
+        '<div class="fb-bar"><div class="fb-bar-in" style="width:' + pct + '%;background:' + col + '"></div></div>' +
         '<span class="fb-pct">' + pct + '%</span>' +
         '</div>';
     }).join('') || '<p class="tip">本月还没有数据</p>';
   }
 }
 
-// 每日支出趋势柱状图
+// 每日收支趋势柱状图（红=支出，绿=收入）
 function renderBar(ms) {
   const el = $('barChart');
   const p = statMonth.split('-').map(Number);
   const days = new Date(p[0], p[1], 0).getDate();
-  const dayArr = new Array(days).fill(0);
-  ms.forEach((r) => { dayArr[Number(r.date.slice(8)) - 1] += r.amount; });
+  const expArr = new Array(days).fill(0);
+  const incArr = new Array(days).fill(0);
+  ms.forEach((r) => {
+    const i = Number(r.date.slice(8)) - 1;
+    if (r.type === 'income') incArr[i] += r.amount;
+    else expArr[i] += r.amount;
+  });
 
   if (window.chartsEnabled) {
     const inst = echarts.getInstanceByDom(el);
@@ -341,12 +418,17 @@ function renderBar(ms) {
     chart.setOption({
       tooltip: {
         trigger: 'axis',
-        formatter: (ps) => ps[0].axisValue + '日<br/>' + fmtMoney(ps[0].value)
+        formatter: (ps) => ps[0].axisValue + '日<br/>' +
+          ps.map((x) => x.marker + x.seriesName + ' ' + fmtMoney(x.value)).join('<br/>')
       },
-      grid: { left: 46, right: 12, top: 12, bottom: 24 },
+      legend: {
+        top: 0, right: 0, itemWidth: 12, itemHeight: 12, icon: 'circle',
+        textStyle: { color: '#52514e', fontSize: 12 }
+      },
+      grid: { left: 46, right: 12, top: 26, bottom: 24 },
       xAxis: {
         type: 'category',
-        data: dayArr.map((_, i) => i + 1),
+        data: expArr.map((_, i) => i + 1),
         axisLabel: { color: '#898781', fontSize: 11, interval: 'auto' },
         axisLine: { lineStyle: { color: '#c3c2b7' } },
         axisTick: { show: false }
@@ -358,40 +440,55 @@ function renderBar(ms) {
         axisLine: { show: false },
         axisTick: { show: false }
       },
-      series: [{
-        type: 'bar',
-        data: dayArr.map((v) => Math.round(v * 100) / 100),
-        itemStyle: { color: '#256abf', borderRadius: [4, 4, 0, 0] },
-        barMaxWidth: 18
-      }]
+      series: [
+        {
+          name: '支出', type: 'bar',
+          data: expArr.map((v) => Math.round(v * 100) / 100),
+          itemStyle: { color: '#e34948', borderRadius: [4, 4, 0, 0] },
+          barMaxWidth: 12
+        },
+        {
+          name: '收入', type: 'bar',
+          data: incArr.map((v) => Math.round(v * 100) / 100),
+          itemStyle: { color: '#0ca30c', borderRadius: [4, 4, 0, 0] },
+          barMaxWidth: 12
+        }
+      ]
     });
   } else {
-    // 离线简易版：CSS 条形图
-    const max = Math.max(...dayArr);
-    el.innerHTML = '<div class="fb-bars">' + dayArr.map((v, i) => {
-      const h = max ? Math.max(v / max * 100, v > 0 ? 4 : 2) : 2;
-      return '<div class="fb-bar-col" title="' + (i + 1) + '日　' + fmtMoney(v) + '">' +
-        '<div class="fb-bar-v" style="height:' + h + '%"></div>' +
-        '<span>' + (i + 1) + '</span></div>';
-    }).join('') + '</div>';
+    // 离线简易版：两行 CSS 条形图
+    const barRow = (label, arr, color) => {
+      const max = Math.max(...arr);
+      return '<div style="font-size:12px;color:#52514e;margin:6px 0 2px">' + label + '</div>' +
+        '<div class="fb-bars" style="height:90px">' + arr.map((v, i) => {
+          const h = max ? Math.max(v / max * 100, v > 0 ? 4 : 2) : 2;
+          return '<div class="fb-bar-col" title="' + (i + 1) + '日　' + fmtMoney(v) + '">' +
+            '<div class="fb-bar-v" style="height:' + h + '%;background:' + color + '"></div>' +
+            '<span>' + (i + 1) + '</span></div>';
+        }).join('') + '</div>';
+    };
+    el.innerHTML = barRow('支出', expArr, '#e34948') + barRow('收入', incArr, '#0ca30c');
   }
 }
 
-// 分类明细（大类可展开小类）
-function renderDetail(ms, total) {
+// 分类明细（大类可展开小类，跟随饼图切换支出/收入）
+function renderDetail(ms) {
+  const list = ms.filter((r) => (statPieType === 'income' ? r.type === 'income' : r.type !== 'income'));
   const map1 = {}, map2 = {};
-  ms.forEach((r) => {
+  list.forEach((r) => {
     map1[r.cat1] = (map1[r.cat1] || 0) + r.amount;
     const k = r.cat1 + '|' + r.cat2;
     map2[k] = (map2[k] || 0) + r.amount;
   });
+  const total = sum(list.map((r) => r.amount));
+  const cats = getStatCats();
 
   const rows = Object.entries(map1).sort((a, b) => b[1] - a[1]);
   $('detailList').innerHTML = rows.length ? rows.map((kv) => {
     const cat = kv[0], v = kv[1];
-    const meta = CATEGORIES.find((c) => c.name === cat);
+    const meta = cats.find((c) => c.name === cat);
     const pct = total ? (v / total * 100).toFixed(1) : '0';
-    const subs = CATEGORIES.find((c) => c.name === cat).subs
+    const subs = cats.find((c) => c.name === cat).subs
       .filter((s) => map2[cat + '|' + s])
       .map((s) =>
         '<div class="sub-row"><span></span><span>' + esc(s) + '</span>' +
@@ -400,7 +497,7 @@ function renderDetail(ms, total) {
     return '<div class="detail-row" data-cat="' + esc(cat) + '">' +
       '<span class="d-icon">' + (meta ? meta.icon : '📦') + '</span>' +
       '<span class="d-name">' + esc(cat) + '</span>' +
-      '<div class="d-bar"><div class="d-bar-in" style="width:' + pct + '%;background:' + (CATEGORY_COLORS[cat] || '#898781') + '"></div></div>' +
+      '<div class="d-bar"><div class="d-bar-in" style="width:' + pct + '%;background:' + colorOf(statPieType, cat) + '"></div></div>' +
       '<span class="d-amount">' + fmtMoney(v) + '</span>' +
       '<span class="d-toggle">▸</span>' +
       '</div>' +
@@ -435,6 +532,7 @@ function restoreSnapshot(i) {
   if (!s) return;
   if (!confirm('确定恢复到 ' + fmtDateCN(s.date) + ' 的数据吗？\n当前数据将被这份快照替换（建议先导出备份）。')) return;
   records = JSON.parse(JSON.stringify(s.data || []));
+  normalizeTypes(records);
   saveRecords();
   renderAll();
   toast('已恢复到 ' + fmtDateCN(s.date) + ' ✅');
@@ -464,6 +562,7 @@ function importBackup(file) {
         if (r && typeof r.amount === 'number' && r.date && r.cat1 && r.cat2 && !ids.has(r.id)) {
           records.push({
             id: r.id || uid(),
+            type: r.type === 'income' ? 'income' : 'expense',
             amount: Number(r.amount),
             date: String(r.date),
             cat1: String(r.cat1),
@@ -502,7 +601,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t) => {
     t.classList.toggle('active', t.dataset.tab === 'page-' + name);
   });
-  if (name === 'add') renderCat1(), renderCat2();
+  if (name === 'add') renderTypeToggle(), renderCat1(), renderCat2();
   if (name === 'bill') renderBill();
   if (name === 'stat') renderStats();
   if (name === 'me') renderMe();
@@ -537,6 +636,14 @@ $('cat2Wrap').addEventListener('click', (e) => {
   selectedCat2 = chip.dataset.sub;
   renderCat2();
 });
+
+// 记账类型切换：支出 / 收入
+$('btnTypeExpense').addEventListener('click', () => setEntryType('expense'));
+$('btnTypeIncome').addEventListener('click', () => setEntryType('income'));
+
+// 统计页饼图切换：支出占比 / 收入占比
+$('btnPieExpense').addEventListener('click', () => { statPieType = 'expense'; renderStats(); });
+$('btnPieIncome').addEventListener('click', () => { statPieType = 'income'; renderStats(); });
 
 // 金额输入：只允许数字和一个小数点，最多两位小数
 $('inputAmount').addEventListener('input', function () {

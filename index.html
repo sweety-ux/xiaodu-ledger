@@ -21,6 +21,10 @@
     <!-- 记账页 -->
     <section id="page-add" class="page">
       <div class="card form-card">
+        <div class="type-toggle">
+          <button id="btnTypeExpense" class="type-btn active">💸 支出</button>
+          <button id="btnTypeIncome" class="type-btn">💰 收入</button>
+        </div>
         <div class="amount-row">
           <span class="cny">¥</span>
           <input id="inputAmount" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" maxlength="10">
@@ -62,12 +66,16 @@
         </div>
         <div class="month-summary">
           <div class="ms-item">
-            <span class="sum-label">总支出</span>
-            <span id="billTotal" class="sum-amount">¥0.00</span>
+            <span class="sum-label">支出</span>
+            <span id="billExpense" class="sum-amount red">¥0.00</span>
+          </div>
+          <div class="ms-item">
+            <span class="sum-label">收入</span>
+            <span id="billIncome" class="sum-amount green">¥0.00</span>
           </div>
           <div class="ms-item ms-right">
-            <span class="sum-label">笔数</span>
-            <span id="billCount">0</span>
+            <span class="sum-label">结余</span>
+            <span id="billBalance" class="sum-amount">¥0.00</span>
           </div>
         </div>
       </div>
@@ -87,25 +95,31 @@
         </div>
         <div class="stat-cards">
           <div class="stat-tile">
-            <span>本月总支出</span>
-            <b id="statTotal">¥0.00</b>
+            <span>本月收入</span>
+            <b id="statIncome" class="green">¥0.00</b>
           </div>
           <div class="stat-tile">
-            <span>支出笔数</span>
-            <b id="statCount">0</b>
+            <span>本月支出</span>
+            <b id="statExpense" class="red">¥0.00</b>
           </div>
           <div class="stat-tile">
-            <span>日均支出</span>
-            <b id="statDaily">¥0.00</b>
+            <span>本月结余</span>
+            <b id="statBalance">¥0.00</b>
           </div>
         </div>
       </div>
       <div class="card chart-card">
-        <h3>支出分类占比（按大类）</h3>
+        <div class="chart-head">
+          <h3>分类占比（按大类）</h3>
+          <div class="seg">
+            <button id="btnPieExpense" class="seg-btn active">支出</button>
+            <button id="btnPieIncome" class="seg-btn">收入</button>
+          </div>
+        </div>
         <div id="pieChart" class="chart"></div>
       </div>
       <div class="card chart-card">
-        <h3>每日支出趋势</h3>
+        <h3>每日收支趋势</h3>
         <div id="barChart" class="chart"></div>
       </div>
       <div class="card">
