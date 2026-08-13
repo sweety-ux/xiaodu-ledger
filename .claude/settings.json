@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node verify.js)",
+      "Bash(node verify2.js)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(node \"C:\\\\Users\\\\1128d\\\\AppData\\\\Local\\\\Temp\\\\heima-test\\\\make-icon.js\")",
+      "Bash(node -e ' *)",
+      "Bash(node verify3.js)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(where winget *)",
+      "Bash(winget install *)",
+      "Bash(curl -s -o /dev/null -w \"api.github.com: %{http_code} \\(%{time_total}s\\)\\\\n\" --max-time 15 https://api.github.com/zen)",
+      "Bash(curl -s -o /dev/null -w \"github.com: %{http_code} \\(%{time_total}s\\)\\\\n\" --max-time 15 https://github.com)",
+      "Bash(unzip -l gh.zip)",
+      "Bash(./bin/gh.exe --version)",
+      "Bash(./bin/gh.exe auth *)",
+      "Bash(/c/Users/1128d/AppData/Local/Temp/heima-test/bin/gh.exe auth *)"
+    ]
+  }
+}
