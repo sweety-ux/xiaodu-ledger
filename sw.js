@@ -9,7 +9,7 @@ const CORE = [
   './style.css',
   './data.js',
   './app.js',
-  './manifest.webmanifest',
+  './manifest.json',
   './icon-192.png',
   './icon-512.png'
 ];
